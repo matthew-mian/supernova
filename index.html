@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Paddle Payment Test · SuperNOVA</title>
+<style>
+  :root{
+    --bg:#070b18; --card:rgba(20,26,52,.78); --line:rgba(120,130,200,.18);
+    --txt:#e8ecff; --dim:#8a90b8; --cyan:#6ee7ff; --purple:#a78bfa; --pink:#ff8fb1; --gold:#ffd479;
+    --green:#6ee78c; --red:#ff8fb1;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:radial-gradient(ellipse at 50% -10%,#1a1f45 0%,#070716 55%,#040410 100%);
+    color:var(--txt);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+  }
+  .wrap{max-width:500px;width:100%}
+  .card{
+    background:var(--card);backdrop-filter:blur(18px);border:1px solid var(--line);
+    border-radius:20px;padding:32px;
+    box-shadow:0 30px 80px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.04) inset;
+  }
+  .env-row{display:flex;gap:10px;margin-bottom:16px}
+  .env-tag{
+    display:inline-block;padding:5px 11px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:.5px;
+    border:1px solid;
+  }
+  .env-tag.sandbox{background:rgba(255,170,70,.14);color:#ffc879;border-color:rgba(255,170,70,.3)}
+  .env-tag.live{background:rgba(110,231,140,.14);color:#9ef2b8;border-color:rgba(110,231,140,.3)}
+  .env-switch{
+    margin-left:auto;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--dim);
+  }
+  .env-switch label{cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid var(--line);user-select:none}
+  .env-switch input{display:none}
+  .env-switch input:checked + span{color:var(--cyan);border-color:var(--cyan)}
+  h1{
+    font-size:26px;font-weight:800;letter-spacing:-.5px;margin-bottom:6px;
+    background:linear-gradient(120deg,#fff,var(--purple),var(--cyan));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .sub{color:var(--dim);font-size:13px;line-height:1.6;margin-bottom:20px}
+  .price{
+    display:flex;align-items:baseline;gap:8px;margin:14px 0 22px;
+    padding:16px 18px;border-radius:14px;
+    background:linear-gradient(135deg,rgba(167,139,250,.12),rgba(110,231,255,.08));
+    border:1px solid rgba(167,139,250,.25);
+  }
+  .cur{font-size:18px;color:var(--dim)}
+  .amt{font-size:40px;font-weight:900;letter-spacing:-1px}
+  .plan{color:var(--dim);font-size:14px}
+  .tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
+  .tag{padding:5px 11px;border-radius:999px;font-size:11px;font-weight:600;background:rgba(110,231,255,.1);color:var(--cyan);border:1px solid rgba(110,231,255,.25)}
+  .tag.g{background:rgba(255,212,121,.1);color:var(--gold);border-color:rgba(255,212,121,.25)}
+  .btn{
+    width:100%;padding:14px 18px;border:0;border-radius:12px;cursor:pointer;
+    font-size:15px;font-weight:700;color:#0b0a1f;
+    background:linear-gradient(120deg,#6ee7ff,#a78bfa,#ff8fb1);background-size:200% 200%;
+    box-shadow:0 8px 30px rgba(167,139,250,.35);transition:transform .15s ease,opacity .15s ease;
+    animation:glow 3s ease-in-out infinite;
+  }
+  .btn:hover{transform:translateY(-1px)}
+  .btn[disabled]{opacity:.5;cursor:not-allowed;animation:none}
+  .btn.secondary{
+    background:transparent;color:var(--cyan);border:1px solid rgba(110,231,255,.4);
+    box-shadow:none;animation:none;margin-top:10px;
+  }
+  .btn.secondary:hover{background:rgba(110,231,255,.08)}
+  @keyframes glow{
+    0%,100%{background-position:0% 50%}
+    50%{background-position:100% 50%}
+  }
+  .kv{margin-top:16px}
+  .kv div{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed rgba(120,130,200,.15);font-size:12px}
+  .kv div:last-child{border-bottom:0}
+  .kv span:first-child{color:var(--dim)}
+  .kv span:last-child{font-family:'Courier New',monospace;color:var(--txt);font-weight:600;max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .status{
+    margin-top:14px;padding:12px 14px;border-radius:10px;font-size:12px;line-height:1.6;
+    background:rgba(90,169,255,.08);border:1px solid rgba(90,169,255,.2);color:#c5d3ff;
+    font-family:'Courier New',monospace;white-space:pre-wrap;word-break:break-all;
+  }
+  .status.ok{background:rgba(110,231,140,.1);border-color:rgba(110,231,140,.25);color:#9ef2b8}
+  .status.err{background:rgba(255,143,177,.1);border-color:rgba(255,143,177,.25);color:#ffc1d3}
+  .status.warn{background:rgba(255,212,121,.08);border-color:rgba(255,212,121,.25);color:#ffe5a0}
+  .hint{
+    margin-top:12px;padding:10px 12px;border-radius:8px;font-size:11px;line-height:1.7;color:var(--dim);
+    background:rgba(255,255,255,.03);border:1px dashed rgba(120,130,200,.18);
+  }
+  .hint b{color:var(--cyan)}
+  .warn-box{
+    margin-top:12px;padding:10px 12px;border-radius:8px;font-size:11px;line-height:1.7;
+    background:rgba(255,143,177,.06);border:1px solid rgba(255,143,177,.3);color:#ffc1d3;
+  }
+  .warn-box b{color:var(--pink)}
+  .env-tab{
+    display:inline-flex;border-radius:8px;overflow:hidden;border:1px solid var(--line);margin-bottom:16px;
+  }
+  .env-tab button{
+    padding:6px 14px;border:0;background:transparent;color:var(--dim);font-size:12px;font-weight:600;cursor:pointer;
+  }
+  .env-tab button.active{background:linear-gradient(120deg,rgba(167,139,250,.2),rgba(110,231,255,.1));color:var(--cyan)}
+  .env-tab button:first-child{border-right:1px solid var(--line)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <!-- 环境切换 -->
+      <div class="env-tab" id="envTab">
+        <button class="active" data-env="sandbox">🧪 Sandbox</button>
+        <button data-env="live">🚀 Live</button>
+      </div>
+
+      <div class="env-tag" id="envTag">◆ SANDBOX · 不会真扣款</div>
+      <h1>SuperNOVA · Full Report</h1>
+      <div class="sub">Unlock Deep Analysis + Evolution Guide · One-time payment</div>
+
+      <div class="tags">
+        <span class="tag">✓ Battleground</span>
+        <span class="tag">✓ Core Fuel</span>
+        <span class="tag g">7-day refund</span>
+      </div>
+
+      <div class="price">
+        <div class="cur">USD $</div>
+        <div class="amt">4.99</div>
+        <div class="plan">one-time</div>
+      </div>
+
+      <!-- 主支付按钮 -->
+      <button class="btn" id="payBtn">✨ Open Paddle Checkout</button>
+      <!-- 手动解锁（备用，用于测试场景） -->
+      <button class="btn secondary" id="manualBtn">✅ I've paid — Unlock manually</button>
+
+      <div class="kv">
+        <div><span>Client Token</span><span id="kvToken">test_...d9235</span></div>
+        <div><span>Price ID</span><span id="kvPrice">pri_01k...b0zg</span></div>
+        <div><span>Checkout URL</span><span id="kvUrl">sandbox-checkout.paddle.com</span></div>
+      </div>
+
+      <div class="status" id="status">Ready. Click the button above to open Paddle Checkout in a new tab.</div>
+
+      <div class="warn-box" id="warnBox">
+        <b>⚠️ 重要提醒</b><br>
+        Paddle 的 SANDBOX 和 LIVE 环境的 <b>ID 完全隔离</b>。<br>
+        如果你用 SANDBOX token + LIVE price ID（或反之），会报 400 错误。<br>
+        请确保当前环境与下方填写的 Price ID 匹配。
+      </div>
+
+      <div class="hint" id="sandboxHint">
+        <b>🧪 Sandbox 测试卡：</b><br>
+        卡号：<b>4242 4242 4242 4242</b>　有效期：<b>12 / 34</b><br>
+        CVC：<b>123</b>　邮编：<b>90210</b>　姓名/邮箱：随便填
+      </div>
+
+      <!-- 配置编辑区 -->
+      <div style="margin-top:16px;padding:12px;border-radius:8px;background:rgba(255,255,255,.03);border:1px dashed rgba(120,130,200,.18)">
+        <div style="font-size:11px;color:var(--dim);margin-bottom:8px;font-weight:600">⚙️ 配置（直接改这里测试不同 ID）</div>
+        <div style="display:flex;gap:8px;margin-bottom:6px">
+          <input type="text" id="priceIdInput" placeholder="Price ID (pri_xxx)" style="flex:1;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--txt);font-family:'Courier New',monospace;font-size:11px;outline:none" />
+        </div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="tokenInput" placeholder="Token (test_xxx 或 prod_xxx)" style="flex:1;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--txt);font-family:'Courier New',monospace;font-size:11px;outline:none" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ========== 配置 ==========
+  let config = {
+    env: 'sandbox',                      // 'sandbox' | 'live'
+    sandboxToken: 'test_14247c86685f7a238cd763d9235',
+    liveToken:    '',                     // 上线时填入 prod_ 开头的 live token
+    sandboxPriceId: 'pri_01kzhs5r29xv29fd9eyxp4b0zg',
+    livePriceId:    '',                   // 上线时填入 live 环境创建的 price ID
+  };
+
+  // ========== DOM ==========
+  const $status    = document.getElementById('status');
+  const $btn       = document.getElementById('payBtn');
+  const $manualBtn = document.getElementById('manualBtn');
+  const $envTag    = document.getElementById('envTag');
+  const $kvToken   = document.getElementById('kvToken');
+  const $kvPrice   = document.getElementById('kvPrice');
+  const $kvUrl     = document.getElementById('kvUrl');
+  const $priceInput= document.getElementById('priceIdInput');
+  const $tokenInput= document.getElementById('tokenInput');
+  const $warnBox   = document.getElementById('warnBox');
+  const $sandboxHint = document.getElementById('sandboxHint');
+
+  function getEffectiveConfig(){
+    const isSandbox = config.env === 'sandbox';
+    return {
+      isSandbox,
+      token:     isSandbox ? config.sandboxToken  : config.liveToken,
+      priceId:   isSandbox ? config.sandboxPriceId: config.livePriceId,
+      checkoutHost: isSandbox ? 'sandbox-checkout.paddle.com' : 'checkout.paddle.com',
+    };
+  }
+
+  function setStatus(msg, type){
+    $status.textContent = msg;
+    $status.className = 'status' + (type ? ' ' + type : '');
+  }
+
+  function refreshUI(){
+    const cfg = getEffectiveConfig();
+    const isSandbox = cfg.isSandbox;
+
+    // 环境标签
+    $envTag.textContent = isSandbox ? '◆ SANDBOX · 不会真扣款' : '◆ LIVE · 真实扣款';
+    $envTag.className = 'env-tag ' + (isSandbox ? 'sandbox' : 'live');
+
+    // 配置值
+    $kvToken.textContent = cfg.token ? (cfg.token.slice(0,8)+'...'+cfg.token.slice(-5)) : '(未设置)';
+    $kvPrice.textContent = cfg.priceId || '(未设置)';
+    $kvUrl.textContent = cfg.checkoutHost;
+
+    $priceInput.value = cfg.priceId;
+    $tokenInput.value = cfg.token;
+
+    // 提示
+    $sandboxHint.style.display = isSandbox ? 'block' : 'none';
+
+    // 检查配置完整性
+    if(!cfg.priceId){
+      setStatus('⚠️ 未设置 Price ID，请在下方输入框填写', 'warn');
+    }else{
+      setStatus('✅ 已就绪（' + (isSandbox?'sandbox':'live') + '）。点击按钮在新标签页打开 Checkout。');
+    }
+
+    // 环境不匹配警告
+    if(isSandbox && !cfg.token.startsWith('test_') && cfg.token){
+      $warnBox.style.display = 'block';
+      $warnBox.innerHTML = '<b>⚠️ Token / 环境不匹配</b><br>当前是 <b>SANDBOX</b> 环境，但 Token 不是 <b>test_</b> 开头。<br>Sandbox 请用 <b>test_</b> 开头的 token，Live 请用对应 price ID。';
+    }else if(!isSandbox && !cfg.token.startsWith('prod_') && cfg.token){
+      $warnBox.style.display = 'block';
+      $warnBox.innerHTML = '<b>⚠️ Token / 环境不匹配</b><br>当前是 <b>LIVE</b> 环境，但 Token 不是 <b>prod_</b> 开头。<br>Live 环境请用 <b>prod_</b> 开头的 token。';
+    }else{
+      $warnBox.style.display = 'none';
+    }
+  }
+
+  // ========== 环境切换 ==========
+  document.querySelectorAll('#envTab button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#envTab button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      config.env = btn.dataset.env;
+      refreshUI();
+    });
+  });
+
+  // ========== 配置输入 ==========
+  $priceInput.addEventListener('change', ()=>{
+    if(config.env === 'sandbox') config.sandboxPriceId = $priceInput.value.trim();
+    else config.livePriceId = $priceInput.value.trim();
+    refreshUI();
+  });
+  $tokenInput.addEventListener('change', ()=>{
+    if(config.env === 'sandbox') config.sandboxToken = $tokenInput.value.trim();
+    else config.liveToken = $tokenInput.value.trim();
+    refreshUI();
+  });
+
+  // ========== 打开 Checkout（托管 URL 方式，绕过 iframe/CSP） ==========
+  $btn.addEventListener('click', ()=>{
+    const cfg = getEffectiveConfig();
+    if(!cfg.priceId){
+      alert('请先填写 Price ID');
+      return;
+    }
+    // Paddle 托管 Checkout URL — 直接在新标签页打开，完全绕过 iframe/CSP 限制
+    const url = 'https://' + cfg.checkoutHost + '/checkout'
+      + '?prices[0][priceId]=' + encodeURIComponent(cfg.priceId)
+      + '&prices[0][quantity]=1';
+    setStatus('⏳ 正在新标签页打开 Paddle Checkout...\n\nURL: ' + url);
+    window.open(url, '_blank');
+  });
+
+  // ========== 手动解锁（测试备用） ==========
+  $manualBtn.addEventListener('click', ()=>{
+    setStatus('✅ 模拟支付成功 — 内容已解锁。\n\n（真实集成中，此处应监听 Paddle 的 checkout.completed 事件）', 'ok');
+  });
+
+  // 初始化
+  refreshUI();
+</script>
+</body>
+</html>
