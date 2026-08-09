@@ -1266,30 +1266,60 @@ function renderResult(){
   showPage('page-result');
 }
 
-/* ============ Paddle 支付（托管 URL 方式，绕过 iframe/CSP 限制） ============ */
-// ===== 配置：上线时把 sandbox 换成 live，priceId 换成 live 环境创建的 ID =====
+/* ============ Paddle 支付（overlay 模式 · 沙盒测试） ============ */
+// 配置：上线时把 sandbox 改为 live，并填入 live priceId
 const PADDLE_CONFIG = {
-  env: 'sandbox',   // 'sandbox' | 'live'
-  sandboxPriceId: 'pri_01kzhs5r29xv29fd9eyxp4b0zg',
-  livePriceId:    '',
-  // 可选：支付成功后跳回的页面（如需自动解锁）
-  successUrl:     ''
+  env: 'sandbox',                                                  // 'sandbox' | 'live'
+  sandboxToken:    'test_14247c86685f7a238cd763d9235',             // 沙盒 client-side token
+  liveToken:       '',                                             // 上线填 prod_ 开头的 live token
+  sandboxPriceId:  'pri_01kzhs5r29xv29fd9eyxp4b0zg',
+  livePriceId:     ''
 };
+let paddleReady = false;
 
-// 点击 Unlock Now → 在新标签页打开 Paddle 托管 Checkout
+// 初始化 Paddle.js
+(function initPaddle(){
+  if(typeof Paddle === 'undefined'){ console.warn('Paddle.js 未加载'); return; }
+  try{
+    if(PADDLE_CONFIG.env === 'sandbox') Paddle.Environment.set('sandbox');
+    Paddle.Initialize({
+      token: PADDLE_CONFIG.env === 'sandbox' ? PADDLE_CONFIG.sandboxToken : PADDLE_CONFIG.liveToken,
+      eventCallback: function(evt){
+        if(!evt || !evt.name) return;
+        console.log('[Paddle]', evt.name, evt.data || '');
+        if(evt.name === 'checkout.completed'){
+          // 支付成功 → 自动解锁
+          unlockContent();
+        }
+      }
+    });
+    setTimeout(()=>{ paddleReady = true; }, 500);
+  }catch(e){ console.error('[Paddle] init error:', e); }
+})();
+
+// 点击 Unlock Now → 调起 Paddle Checkout overlay
 function openPaddleCheckout(){
-  const isSandbox = PADDLE_CONFIG.env === 'sandbox';
-  const priceId = isSandbox ? PADDLE_CONFIG.sandboxPriceId : PADDLE_CONFIG.livePriceId;
-  if(!priceId){ alert('请先在 PADDLE_CONFIG 中设置 ' + (isSandbox?'sandbox':'live') + 'PriceId'); return; }
-  const host = isSandbox ? 'sandbox-checkout.paddle.com' : 'checkout.paddle.com';
-  const url  = 'https://' + host + '/checkout'
-    + '?prices[0][priceId]=' + encodeURIComponent(priceId)
-    + '&prices[0][quantity]=1';
-  // 直接在新标签页打开，完全绕过 iframe/CSP 限制
-  window.open(url, '_blank');
+  if(!paddleReady || typeof Paddle === 'undefined'){
+    alert('Payment system is loading, please try again in 2 seconds.');
+    return;
+  }
+  const priceId = PADDLE_CONFIG.env === 'sandbox' ? PADDLE_CONFIG.sandboxPriceId : PADDLE_CONFIG.livePriceId;
+  if(!priceId){ alert('Price ID not configured'); return; }
+  try{
+    Paddle.Checkout.open({
+      items: [{ priceId: priceId, quantity: 1 }],
+      settings: {
+        displayMode: 'overlay',
+        theme: 'dark',
+        locale: 'en'
+      }
+    });
+  }catch(e){
+    alert('Checkout error: ' + (e.message || JSON.stringify(e)));
+  }
 }
 
-// 手动解锁按钮（测试备用：支付完成后用户手动点击解锁）
+// 手动解锁（测试备用，万一事件回调失败）
 function manualUnlock(){
   unlockContent();
 }
@@ -1447,5 +1477,8 @@ document.getElementById('btnUnlock').onclick=openPaddleCheckout;
 /* 初始化第一题（待用户进入） */
 renderQ();
 </script>
+</body>
+</html>
+
 </body>
 </html>
