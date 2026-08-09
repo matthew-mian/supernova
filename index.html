@@ -6,8 +6,8 @@
 <title>SuperNOVA · Discover Your Asymmetric Advantage</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<!-- Paddle.js v2 (Billing) · sandbox 测试环境，上线前切到 live token + 移除 Environment.set('sandbox') -->
-<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+<!-- Creem Embedded Checkout · 弹窗模式不跳转（embed.js 自动捕获 affiliate ref；defer 异步加载） -->
+<script src="https://www.creem.io/embed.js" defer></script>
 <style>
   :root{
     --bg:#05060f;
@@ -1266,56 +1266,75 @@ function renderResult(){
   showPage('page-result');
 }
 
-/* ============ Paddle 支付（overlay 模式 · 沙盒测试） ============ */
-// 配置：上线时把 sandbox 改为 live，并填入 live priceId
-const PADDLE_CONFIG = {
-  env: 'sandbox',                                                  // 'sandbox' | 'live'
-  sandboxToken:    'test_2d391d0f6260cf9c44222317d6b',             // 沙盒 client-side token
-  liveToken:       '',                                             // 上线填 prod_ 开头的 live token
-  sandboxPriceId:  'pri_01kzhs5r29xv29fd9eyxp4b0zg',
-  livePriceId:     ''
+/* ============ Creem 支付（弹窗 overlay · 不跳转） ============
+   架构说明：
+   - Creem 的嵌入式弹窗结账需要「服务端先用 secret API key 创建 checkout session」→ 拿到 checkoutUrl
+   - 前端拿到 checkoutUrl 后调 Creem.openCheckout() 在当前页弹窗，不跳转
+   - secret API key 绝不能出现在前端代码里 → 放在 /api/checkout.js 的环境变量
+   - onComplete 是 UX 回调（可被伪造），仅用于即时解锁体验；真实放权请用 webhook（服务端验签）
+*/
+const CREEM_CONFIG = {
+  productId: 'prod_7G2zTME0gRxz09wGHsG0L4',   // Product ID 不是机密，可写在前端
+  theme:  'dark',   // 'light' | 'dark'
+  locale: 'en'
 };
-let paddleReady = false;
+let creemReady = false;
 
-// 初始化 Paddle.js
-(function initPaddle(){
-  if(typeof Paddle === 'undefined'){ console.warn('Paddle.js 未加载'); return; }
-  try{
-    if(PADDLE_CONFIG.env === 'sandbox') Paddle.Environment.set('sandbox');
-    Paddle.Initialize({
-      token: PADDLE_CONFIG.env === 'sandbox' ? PADDLE_CONFIG.sandboxToken : PADDLE_CONFIG.liveToken,
-      eventCallback: function(evt){
-        if(!evt || !evt.name) return;
-        console.log('[Paddle]', evt.name, evt.data || '');
-        if(evt.name === 'checkout.completed'){
-          // 支付成功 → 自动解锁
-          unlockContent();
-        }
-      }
-    });
-    setTimeout(()=>{ paddleReady = true; }, 500);
-  }catch(e){ console.error('[Paddle] init error:', e); }
+// embed.js 用 defer 加载，可能此时还没就绪 → 轮询检测 Creem 全局对象
+(function initCreem(){
+  const t = setInterval(()=>{
+    if(typeof Creem !== 'undefined' && typeof Creem.openCheckout === 'function'){
+      creemReady = true;
+      clearInterval(t);
+      console.log('[Creem] embed.js ready');
+    }
+  }, 200);
+  setTimeout(()=>{ clearInterval(t); }, 10000); // 最多等 10 秒
 })();
 
-// 点击 Unlock Now → 调起 Paddle Checkout overlay
-function openPaddleCheckout(){
-  if(!paddleReady || typeof Paddle === 'undefined'){
-    alert('Payment system is loading, please try again in 2 seconds.');
+// 点击 Unlock Now → 创建 checkout session → 弹出 Creem 结账浮层（不跳转）
+async function openCreemCheckout(){
+  if(!creemReady || typeof Creem === 'undefined'){
+    alert('Payment system is loading, please try again in a moment.');
     return;
   }
-  const priceId = PADDLE_CONFIG.env === 'sandbox' ? PADDLE_CONFIG.sandboxPriceId : PADDLE_CONFIG.livePriceId;
-  if(!priceId){ alert('Price ID not configured'); return; }
+  const btn = document.getElementById('btnUnlock');
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
   try{
-    Paddle.Checkout.open({
-      items: [{ priceId: priceId, quantity: 1 }],
-      settings: {
-        displayMode: 'overlay',
-        theme: 'dark',
-        locale: 'en'
+    // 1. 服务端创建 checkout session（secret API key 留在服务端，不下发前端）
+    const res = await fetch('/api/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: CREEM_CONFIG.productId })
+    });
+    const data = await res.json();
+    if(!res.ok || !data.checkoutUrl){
+      throw new Error(data.error || 'Failed to create checkout session');
+    }
+    // 2. 在当前页弹出 Creem 结账浮层（不跳转）
+    Creem.openCheckout({
+      checkoutUrl: data.checkoutUrl,
+      theme:  CREEM_CONFIG.theme,
+      locale: CREEM_CONFIG.locale,
+      onComplete: function(detail){
+        // 支付完成（UX 回调）→ 提示 + 关闭浮层 + 解锁内容
+        console.log('[Creem] payment complete', detail);
+        try{ Creem.close(); }catch(_){}
+        alert('支付成功');
+        unlockContent();
+      },
+      onClose: function(){
+        btn.disabled = false;
+        btn.textContent = origText;
       }
     });
   }catch(e){
-    alert('Checkout error: ' + (e.message || JSON.stringify(e)));
+    console.error('[Creem] checkout error:', e);
+    alert('Checkout error: ' + (e.message || e));
+    btn.disabled = false;
+    btn.textContent = origText;
   }
 }
 
@@ -1471,12 +1490,11 @@ document.getElementById('btnShare').onclick=showShare;
 document.getElementById('btnBack').onclick=()=>showPage('page-result');
 document.getElementById('btnSave').onclick=generatePoster;
 
-// Paddle Checkout 按钮事件（真实支付流程）
-document.getElementById('btnUnlock').onclick=openPaddleCheckout;
+// Creem Checkout 按钮事件（真实支付流程 · 弹窗不跳转）
+document.getElementById('btnUnlock').onclick=openCreemCheckout;
 
 /* 初始化第一题（待用户进入） */
 renderQ();
 </script>
 </body>
 </html>
-
